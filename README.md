@@ -1,21 +1,25 @@
-# ONNX Runtime Profiler
+# onnx-rt-profiler-viewer
+ONNX モデルの入力を自動推定し推論後、プロファイル結果を HTML レポートとして出力するツール。<BR>既存のプロファイル JSON から HTML レポートのみを生成することも可能。
 
-ONNX モデルの入力を自動推定し、ランダム入力で推論を実行して、プロファイル結果をインタラクティブな HTML レポートとして出力するツール。既存のプロファイル JSON から HTML レポートのみを生成することも可能。
+## Requirements
 
-## セットアップ
+- `onnx` — モデル読み込み・入力推定
+- `onnxruntime` — 推論実行・プロファイリング
+- `numpy` — データ生成・集計
 
+HTML レポートは以下の CDN ライブラリを使用（ネット接続が必要）:
+- [Chart.js](https://www.chartjs.org/) — 棒グラフ・円グラフ
+- [D3.js](https://d3js.org/) — flamegraph 描画
+- [d3-flame-graph](https://github.com/spiermar/d3-flame-graph) — flamegraph ライブラリ
+
+## Installation
 ```bash
-python -m venv venv
-venv/Scripts/activate  # Windows
-# source venv/bin/activate  # Linux/Mac
-
 pip install onnx onnxruntime numpy
 ```
 
-## 使い方
+## Usage
 
 2つのサブコマンドがあります。
-
 ### `run` — モデル実行 + プロファイル + HTML 生成
 
 ```bash
@@ -89,7 +93,7 @@ print(prof_file)  # => ort_profile_2026-03-26_18-28-07.json
 python main.py report ort_profile_2026-03-26_18-28-07.json
 ```
 
-## 出力
+## Outputs
 
 ### プロファイル JSON
 ORT のネイティブプロファイル出力。`chrome://tracing` でも開けます。
@@ -107,7 +111,7 @@ ORT のネイティブプロファイル出力。`chrome://tracing` でも開け
 - **Top 20 Nodes** — 平均実行時間が長い上位 20 ノードの棒グラフ
 - **All Nodes** — 全ノード一覧テーブル。フィルタ検索、Op Type フィルタ、累積パーセンテージ表示
 
-## 入力の自動推定
+## Automatic Input Inference
 
 `run` コマンドでは ONNX モデルの入力定義から以下を自動推定します:
 
@@ -115,7 +119,7 @@ ORT のネイティブプロファイル出力。`chrome://tracing` でも開け
 - **データ型**: ONNX の型定義に従い対応する NumPy 型を使用
 - **値**: 整数型は 0-255 のランダム、浮動小数点型は 0-1 の一様分布（スカラー/1D は 256-1024 の正の値）、bool はランダム
 
-## プロジェクト構成
+## Project Structure
 
 ```
 main.py                      # CLI エントリポイント (run / report サブコマンド)
@@ -127,13 +131,8 @@ onnx_profiler/
   report.py                  # HTML レポート生成
 ```
 
-## 依存関係
+# Author
+高橋かずひと(https://x.com/KzhtTkhs)
 
-- `onnx` — モデル読み込み・入力推定
-- `onnxruntime` — 推論実行・プロファイリング
-- `numpy` — データ生成・集計
-
-HTML レポートは以下の CDN ライブラリを使用（ネット接続が必要）:
-- [Chart.js](https://www.chartjs.org/) — 棒グラフ・円グラフ
-- [D3.js](https://d3js.org/) — flamegraph 描画
-- [d3-flame-graph](https://github.com/spiermar/d3-flame-graph) — flamegraph ライブラリ
+# License
+onnx-rt-profiler-viewer is under [Apache 2.0 license](LICENSE).
