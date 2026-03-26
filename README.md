@@ -1,5 +1,10 @@
 # onnx-rt-profiler-viewer
-ONNX モデルの入力を自動推定し推論後、プロファイル結果を HTML レポートとして出力するツール。<BR>既存のプロファイル JSON から HTML レポートのみを生成することも可能。
+ONNX モデルの入力を自動推定し推論後、プロファイル結果を HTML レポートとして出力するツール。<BR>既存のプロファイル JSON から HTML レポートのみを生成することも可能。<BR>
+表示イメージは以下URLから確認できます。
+* https://kazuhito00.github.io/onnx-rt-profiler-viewer/assets/ort_profile_sample.html
+
+<img width="85%" alt="image" src="https://github.com/user-attachments/assets/8bf09e93-4379-47ef-9103-9c656a169978" /><br><img width="85%" alt="image" src="https://github.com/user-attachments/assets/b3755071-6759-4a20-8537-93d158a1aabc" />
+
 
 ## Requirements
 
