@@ -102,7 +102,7 @@ python main.py report ort_profile_2026-03-26_18-28-07.json
 ## Outputs
 
 ### プロファイル JSON
-ORT のネイティブプロファイル出力。`chrome://tracing` でも開けます。
+ORT のネイティブプロファイル出力。
 
 ### HTML レポート
 プロファイル JSON と同名の `.html` ファイルが生成されます。ブラウザで開くとインタラクティブなレポートが表示されます。
