@@ -3,9 +3,7 @@ ONNX モデルの入力を自動推定し推論後、プロファイル結果を
 表示イメージは以下URLから確認できます。
 * https://kazuhito00.github.io/onnx-rt-profiler-viewer/assets/ort_profile_sample.html
 
-<img width="85%" alt="image" src="https://github.com/user-attachments/assets/71082b5e-415e-4beb-a9fc-4a1e1925475a" /><br><img width="85%" alt="image" src="https://github.com/user-attachments/assets/28ffe49a-aabd-4856-a8a3-b6e2942f3f07" />
-
-
+<img width="85%" alt="image" src="https://github.com/user-attachments/assets/2bcb375d-801d-41af-b90b-489069c3c4d0" /><br><img width="85%" alt="image" src="https://github.com/user-attachments/assets/b0da4f38-e7c3-4ae2-958a-aee957606a54" />
 
 ## Requirements
 
