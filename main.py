@@ -28,6 +28,15 @@ def print_summary(agg):
     for o in agg["op_type_summary"][:10]:
         print(f"  {o['op_type']:<20} {o['avg_us']/1000:>12,.2f} {o['pct']:>6.1f}%")
 
+    ep_summary = agg.get("ep_summary", [])
+    if ep_summary and not (len(ep_summary) == 1 and ep_summary[0]["provider"] == "(unknown)"):
+        print(f"\n  Execution Provider 別:")
+        print(f"  {'Provider':<30} {'Nodes':>6} {'Avg(ms)':>12} {'%':>7}")
+        print(f"  {'-'*58}")
+        for ep in ep_summary:
+            short = ep["provider"].replace("ExecutionProvider", " EP")
+            print(f"  {short:<30} {ep['node_count']:>6} {ep['avg_us']/1000:>12,.2f} {ep['pct']:>6.1f}%")
+
 
 def generate_report(profile_file, output_path, num_runs, num_warmup, model_path=None, input_info=None):
     agg = aggregate_profile(profile_file, num_runs, num_warmup)
@@ -64,12 +73,42 @@ def cmd_run(args):
     for info in input_info:
         print(f"  {info['name']}: shape={info['shape']}, dtype={info['dtype']}")
 
+    # Execution Provider の決定
+    available_eps = ort.get_available_providers()
+    if args.ep:
+        providers = [ep if ep.endswith("ExecutionProvider") else ep + "ExecutionProvider"
+                     for ep in args.ep]
+        providers = [ep for ep in providers if ep in available_eps]
+        if not providers:
+            print(f"警告: 指定された EP が利用できません。利用可能: {available_eps}", file=sys.stderr)
+            providers = None
+    else:
+        # GPU 系 EP が使えるなら自動で追加（CPU はフォールバックとして常に末尾）
+        providers = []
+        for ep in ["CUDAExecutionProvider", "TensorrtExecutionProvider", "DmlExecutionProvider"]:
+            if ep in available_eps:
+                providers.append(ep)
+        if providers:
+            providers.append("CPUExecutionProvider")
+        else:
+            providers = None  # デフォルト (CPU のみ)
+
     print(f"\nプロファイリング実行中 (ウォームアップ {args.num_warmup} 回 + 計測 {args.num_runs} 回)...")
     opts = ort.SessionOptions()
     opts.enable_profiling = True
     opts.profile_file_prefix = os.path.join(os.path.abspath(args.output_dir), "ort_profile")
 
-    session = ort.InferenceSession(args.model, sess_options=opts)
+    session = ort.InferenceSession(args.model, sess_options=opts, providers=providers)
+
+    # セッションが実際にロードした EP を表示
+    active_eps = session.get_providers()
+    requested = providers or ["CPUExecutionProvider"]
+    skipped = [ep for ep in requested if ep not in active_eps]
+    if skipped:
+        for ep in skipped:
+            short = ep.replace("ExecutionProvider", "")
+            print(f"  {short} EP: ランタイムライブラリが見つからないためスキップ")
+    print(f"  Active EPs: {', '.join(ep.replace('ExecutionProvider', '') for ep in active_eps)}")
     output_names = [o.name for o in session.get_outputs()]
 
     for _ in range(args.num_warmup):
@@ -126,6 +165,8 @@ def main():
                        help=f"計測実行回数 (デフォルト: {NUM_RUNS})")
     p_run.add_argument("-w", "--num-warmup", type=int, default=NUM_WARMUP,
                        help=f"ウォームアップ回数 (デフォルト: {NUM_WARMUP})")
+    p_run.add_argument("-e", "--ep", action="append", metavar="EP",
+                       help="使用する Execution Provider (例: -e CUDA -e CPU)。未指定時は GPU 系 EP を自動検出")
 
     # report: 既存 JSON から HTML 生成
     p_report = subparsers.add_parser("report", help="既存のプロファイル JSON から HTML レポートを生成")

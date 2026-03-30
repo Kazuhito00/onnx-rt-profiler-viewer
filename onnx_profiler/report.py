@@ -41,18 +41,37 @@ def generate_html_report(agg, model_path, input_info, output_path, num_warmup,
     for info in input_info:
         input_rows_html += f"<tr><td>{e(info['name'])}</td><td>{info['shape']}</td><td>{e(info['dtype'])}</td></tr>\n"
 
+    # EP 別サマリー HTML
+    ep_summary = agg.get("ep_summary", [])
+    has_ep = len(ep_summary) > 0 and not (len(ep_summary) == 1 and ep_summary[0]["provider"] == "(unknown)")
+    ep_summary_html = ""
+    if has_ep:
+        for ep in ep_summary:
+            short_name = ep["provider"].replace("ExecutionProvider", "")
+            ep_summary_html += (
+                f"<div class='ep-item'>"
+                f"<span class='ep-badge ep-{short_name.lower()}'>{e(short_name)}</span>"
+                f"<span class='ep-detail'>{ep['node_count']} nodes &mdash; "
+                f"{ep['avg_us']/1000:,.2f} ms ({ep['pct']:.1f}%)</span>"
+                f"</div>\n"
+            )
+
     node_rows_html = ""
     cumulative_pct = 0.0
     for i, r in enumerate(agg["nodes"]):
         cumulative_pct += r["pct"]
         name_disp = e(r["name"])
         op_disp = e(r["op_type"])
+        provider_disp = r.get("provider", "")
+        ep_short = provider_disp.replace("ExecutionProvider", "") if provider_disp else ""
         bar_color = op_color_map.get(r["op_type"], "#94a3b8")
+        ep_td = f"<td><span class='ep-badge ep-{ep_short.lower()}'>{e(ep_short)}</span></td>" if has_ep else ""
         node_rows_html += (
-            f"<tr>"
+            f"<tr data-ep='{e(ep_short)}'>"
             f"<td class='rank'>{i+1}</td>"
             f"<td class='node-name' title='{name_disp}'>{name_disp}</td>"
             f"<td>{op_disp}</td>"
+            f"{ep_td}"
             f"<td class='num'>{r['avg_us']/1000:,.2f}</td>"
             f"<td class='num'>{r['min_us']/1000:,.2f}</td>"
             f"<td class='num'>{r['max_us']/1000:,.2f}</td>"
@@ -120,6 +139,20 @@ def generate_html_report(agg, model_path, input_info, output_path, num_warmup,
                         padding:6px 12px; border-radius:6px; font-size:0.82rem; }}
   .footer {{ text-align:center; color:var(--text2); font-size:0.75rem; padding:20px 0; }}
 
+  /* ── EP badges ── */
+  .ep-badge {{ display:inline-block; padding:2px 8px; border-radius:4px; font-size:0.7rem;
+               font-weight:600; white-space:nowrap; }}
+  .ep-cuda {{ background:#7c3aed; color:#fff; }}
+  .ep-cpu  {{ background:#64748b; color:#fff; }}
+  .ep-tensorrt {{ background:#76b900; color:#fff; }}
+  .ep-dml  {{ background:#0078d4; color:#fff; }}
+  .ep-badge:not(.ep-cuda):not(.ep-cpu):not(.ep-tensorrt):not(.ep-dml) {{ background:#94a3b8; color:#fff; }}
+
+  .ep-summary {{ display:flex; gap:16px; flex-wrap:wrap; margin-bottom:28px; }}
+  .ep-item {{ display:flex; align-items:center; gap:8px; background:var(--surface); border-radius:10px;
+              padding:10px 16px; border:1px solid var(--border); box-shadow:0 1px 3px rgba(0,0,0,0.06); }}
+  .ep-detail {{ font-size:0.82rem; color:var(--text2); }}
+
   /* ── Timeline (chrome://tracing style) ── */
   .tl-outer {{ position:relative; overflow:hidden; border:1px solid #cbd5e1; border-radius:8px; background:#fff; }}
 
@@ -178,6 +211,8 @@ def generate_html_report(agg, model_path, input_info, output_path, num_warmup,
     </div>
   </div>
 
+  {"<div class='ep-summary'>" + ep_summary_html + "</div>" if has_ep else ""}
+
   <div class="section">
     <h2>Input Tensors</h2>
     <table class="input-table">
@@ -235,11 +270,12 @@ def generate_html_report(agg, model_path, input_info, output_path, num_warmup,
       <select id="opTypeSelect" onchange="filterNodes()">
         <option value="">All Op Types</option>
       </select>
+      {"<select id='epSelect' onchange='filterNodes()'><option value=''>All EPs</option></select>" if has_ep else ""}
     </div>
     <div class="table-wrap">
       <table id="nodeTable">
         <thead>
-          <tr><th>#</th><th>Node Name</th><th>Op Type</th><th>Avg (ms)</th><th>Min</th><th>Max</th><th>Std</th><th>%</th><th>Cumulative</th><th style="width:15%"></th></tr>
+          <tr><th>#</th><th>Node Name</th><th>Op Type</th>{"<th>EP</th>" if has_ep else ""}<th>Avg (ms)</th><th>Min</th><th>Max</th><th>Std</th><th>%</th><th>Cumulative</th><th style="width:15%"></th></tr>
         </thead>
         <tbody>
           {node_rows_html}
@@ -267,16 +303,27 @@ new Chart(document.getElementById('barChart'), {{
 
 
 /* ── Node table filter ── */
+const HAS_EP = {'true' if has_ep else 'false'};
 const opTypesSet = new Set();
-document.querySelectorAll('#nodeTable tbody tr').forEach(tr=>{{ const op=tr.children[2].textContent; if(op) opTypesSet.add(op); }});
+const epSet = new Set();
+document.querySelectorAll('#nodeTable tbody tr').forEach(tr=>{{
+  const op=tr.children[2].textContent; if(op) opTypesSet.add(op);
+  if (HAS_EP) {{ const ep=tr.dataset.ep; if(ep) epSet.add(ep); }}
+}});
 const selEl=document.getElementById('opTypeSelect');
 [...opTypesSet].sort().forEach(op=>{{ const o=document.createElement('option'); o.value=op; o.textContent=op; selEl.appendChild(o); }});
+if (HAS_EP) {{
+  const epEl=document.getElementById('epSelect');
+  [...epSet].sort().forEach(ep=>{{ const o=document.createElement('option'); o.value=ep; o.textContent=ep; epEl.appendChild(o); }});
+}}
 function filterNodes(){{
   const q=document.getElementById('nodeFilter').value.toLowerCase();
   const opF=document.getElementById('opTypeSelect').value;
+  const epF=HAS_EP ? document.getElementById('epSelect').value : '';
   document.querySelectorAll('#nodeTable tbody tr').forEach(tr=>{{
     const n=tr.children[1].textContent.toLowerCase(), op=tr.children[2].textContent;
-    tr.style.display=(!q||n.includes(q)||op.toLowerCase().includes(q))&&(!opF||op===opF)?'':'none';
+    const ep=tr.dataset.ep||'';
+    tr.style.display=(!q||n.includes(q)||op.toLowerCase().includes(q))&&(!opF||op===opF)&&(!epF||ep===epF)?'':'none';
   }});
 }}
 
@@ -306,11 +353,10 @@ function filterNodes(){{
      Row 0: Process header (dark)
      Row 1: Thread header (dark)
      Row 2: model_loading* + session_initialization + model_run  (Session, same row)
-     Row 3+: Node events (greedy lane packing)
+     Row 3+: Node events — EP が複数ある場合は EP ごとにヘッダ行 + レーン群
   */
   const HEADER_ROWS = 2;           // Process + Thread
   const SESSION_TOP_ROW = 2;       // loading / init / model_run
-  const NODE_START_ROW = 3;        // Node events start here
 
   const sessionEvents = RAW.filter(e => e.cat === 'Session');
   const nodeEvents    = RAW.filter(e => e.cat === 'Node');
@@ -321,20 +367,60 @@ function filterNodes(){{
     placed.push({{ row: SESSION_TOP_ROW, ev }});
   }}
 
-  // Pack Node events into lanes starting at NODE_START_ROW
-  nodeEvents.sort((a,b) => a.ts - b.ts || b.dur - a.dur);
-  const laneEnds = [];  // laneEnds[i] = end-ts of lane i
+  // EP 別にノードをグルーピング
+  const epGroups = {{}};
   for (const ev of nodeEvents) {{
-    let lane = -1;
-    for (let l = 0; l < laneEnds.length; l++) {{
-      if (laneEnds[l] <= ev.ts) {{ lane = l; break; }}
+    const ep = ev.provider ? ev.provider.replace('ExecutionProvider','') : '';
+    if (!epGroups[ep]) epGroups[ep] = [];
+    epGroups[ep].push(ev);
+  }}
+  const epNames = Object.keys(epGroups).sort((a,b) => {{
+    // CUDA / GPU 系を先、CPU を後、空を最後
+    if (!a) return 1; if (!b) return -1;
+    if (a === 'CPU') return 1; if (b === 'CPU') return -1;
+    return a.localeCompare(b);
+  }});
+  const hasMultiEP = epNames.length > 1 || (epNames.length === 1 && epNames[0] !== '');
+
+  // EP ごとにレーンパッキング (ヘッダ行なし、ラベルで EP 名を表示)
+  let nextRow = 3;  // Session row の次から
+  const rowEpLabel = {{}};  // row -> EP name (各 EP グループの先頭レーンのみ)
+
+  if (hasMultiEP) {{
+    for (const ep of epNames) {{
+      const groupStartRow = nextRow;
+      const evs = epGroups[ep];
+      evs.sort((a,b) => a.ts - b.ts || b.dur - a.dur);
+      const laneEnds = [];
+      for (const ev of evs) {{
+        let lane = -1;
+        for (let l = 0; l < laneEnds.length; l++) {{
+          if (laneEnds[l] <= ev.ts) {{ lane = l; break; }}
+        }}
+        if (lane === -1) {{ lane = laneEnds.length; laneEnds.push(0); }}
+        laneEnds[lane] = ev.ts + ev.dur;
+        placed.push({{ row: nextRow + lane, ev }});
+      }}
+      rowEpLabel[groupStartRow] = ep || 'Other';
+      nextRow += laneEnds.length;
     }}
-    if (lane === -1) {{ lane = laneEnds.length; laneEnds.push(0); }}
-    laneEnds[lane] = ev.ts + ev.dur;
-    placed.push({{ row: NODE_START_ROW + lane, ev }});
+  }} else {{
+    // EP 情報なし or 単一 EP: 従来通りフラットにパック
+    nodeEvents.sort((a,b) => a.ts - b.ts || b.dur - a.dur);
+    const laneEnds = [];
+    for (const ev of nodeEvents) {{
+      let lane = -1;
+      for (let l = 0; l < laneEnds.length; l++) {{
+        if (laneEnds[l] <= ev.ts) {{ lane = l; break; }}
+      }}
+      if (lane === -1) {{ lane = laneEnds.length; laneEnds.push(0); }}
+      laneEnds[lane] = ev.ts + ev.dur;
+      placed.push({{ row: nextRow + lane, ev }});
+    }}
+    nextRow += laneEnds.length;
   }}
 
-  const totalRows = NODE_START_ROW + laneEnds.length;
+  const totalRows = nextRow;
 
   /* ── Sizing ── */
   const ROW_H = 24;
@@ -343,13 +429,13 @@ function filterNodes(){{
   /* ── Row labels ── */
   const labelsEl = document.getElementById('tlLabels');
   labelsEl.innerHTML = '';
-  const labelTexts = [];
   for (let r = 0; r < totalRows; r++) {{
     const div = document.createElement('div');
     div.className = 'tl-label-row' + (r < HEADER_ROWS ? ' header' : '');
     div.style.height = ROW_H + 'px';
     if (r === 0) div.textContent = 'Process ' + (RAW[0].pid || '');
     else if (r === 1) div.textContent = 'Thread ' + (RAW[0].tid || '');
+    else if (rowEpLabel[r]) div.textContent = rowEpLabel[r];
     else div.textContent = '';
     labelsEl.appendChild(div);
   }}
@@ -549,9 +635,12 @@ function filterNodes(){{
       const c = colorFor(ev);
       const durStr = ev.dur >= 1000 ? (ev.dur/1000).toFixed(2)+' ms' : ev.dur+' us';
       const ttName = ev.label || ev.name;
+      const epShort = ev.provider ? ev.provider.replace('ExecutionProvider','') : '';
+      const epBadge = epShort ? ` <span class="ep-badge ep-${{epShort.toLowerCase()}}">${{epShort}}</span>` : '';
       tooltip.innerHTML = `<div class="tt-name">${{ttName}}</div>`
         + `<span class="tt-cat" style="background:${{c}}">${{ev.cat}}</span>`
         + (ev.op ? ` <span style="color:${{c}};font-weight:600">${{ev.op}}</span>` : '')
+        + epBadge
         + `<div class="tt-dur">${{durStr}}</div>`;
       tooltip.style.display = 'block';
       let tx = e.clientX + 14, ty = e.clientY + 14;

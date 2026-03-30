@@ -12,6 +12,7 @@ def aggregate_profile(profile_path, num_runs, num_warmup):
 
     node_durations = defaultdict(list)
     node_op_type = {}
+    node_provider = {}
     all_trace_events = []
 
     model_run_count = 0
@@ -22,12 +23,15 @@ def aggregate_profile(profile_path, num_runs, num_warmup):
         cat = ev.get("cat", "")
         name = ev.get("name", "unknown")
         op = ""
-        if "args" in ev and "op_name" in ev["args"]:
-            op = ev["args"]["op_name"]
+        provider = ""
+        if "args" in ev:
+            op = ev["args"].get("op_name", "")
+            provider = ev["args"].get("provider", "")
         raw_trace.append({
             "name": name,
             "cat": cat,
             "op": op,
+            "provider": provider,
             "ts": ev["ts"],
             "dur": ev["dur"],
             "tid": ev.get("tid", 0),
@@ -36,6 +40,8 @@ def aggregate_profile(profile_path, num_runs, num_warmup):
         if cat == "Node":
             if op:
                 node_op_type[name] = op
+            if provider:
+                node_provider[name] = provider
 
     model_runs = sorted(
         [e for e in raw_trace if e["name"] == "model_run"],
@@ -74,9 +80,11 @@ def aggregate_profile(profile_path, num_runs, num_warmup):
     for name, durs in node_durations.items():
         avg = np.mean(durs)
         op_type = node_op_type.get(name, "")
+        provider = node_provider.get(name, "")
         rows.append({
             "name": name,
             "op_type": op_type,
+            "provider": provider,
             "avg_us": float(avg),
             "min_us": float(np.min(durs)),
             "max_us": float(np.max(durs)),
@@ -97,6 +105,20 @@ def aggregate_profile(profile_path, num_runs, num_warmup):
         {"op_type": op, "avg_us": dur, "pct": dur / total_avg * 100 if total_avg > 0 else 0}
         for op, dur in op_type_rows
     ]
+
+    # EP (Execution Provider) 別サマリー
+    ep_totals = defaultdict(float)
+    ep_counts = defaultdict(int)
+    for r in rows:
+        ep = r["provider"] or "(unknown)"
+        ep_totals[ep] += r["avg_us"]
+        ep_counts[ep] += 1
+    ep_summary = sorted(
+        [{"provider": ep, "avg_us": dur, "pct": dur / total_avg * 100 if total_avg > 0 else 0,
+          "node_count": ep_counts[ep]}
+         for ep, dur in ep_totals.items()],
+        key=lambda x: x["avg_us"], reverse=True,
+    )
 
     avg_run_us = float(np.mean([r["dur"] for r in profiled_runs])) if profiled_runs else 0.0
 
@@ -123,6 +145,7 @@ def aggregate_profile(profile_path, num_runs, num_warmup):
         "num_nodes": len(rows),
         "nodes": rows,
         "op_type_summary": op_type_summary,
+        "ep_summary": ep_summary,
         "trace_events": all_trace_events,
         "per_run_op": per_run_op,
     }
