@@ -129,6 +129,8 @@ ORT のネイティブプロファイル出力。
 
 ## Execution Provider (EP)
 
+<img width="85%" alt="image" src="https://github.com/user-attachments/assets/19d8e734-0b0f-4cc9-801d-d1b3ebe6b7d2" />
+
 `onnxruntime-gpu` がインストールされている場合、CUDA EP を自動検出して使用します（CPU EP をフォールバックとして併用）。<BR>
 `-e` オプションで明示指定も可能です。`ExecutionProvider` サフィックスは省略できます。
 
